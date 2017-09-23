@@ -33,7 +33,7 @@
 #define right_index(n) (((n->pos)*(2))+(1))
 #define parent(n) (tree[(unsigned)((n->pos)/(2))])
 #define parent_index(n) ((unsigned)((n->pos)/(2)))
-#define level(n) ((unsigned) ((overall_height)-(log2_((n->mem_size)/(PAGE_SIZE)))))
+#define level(n) ((unsigned) ( (overall_height) - (log2_(( (n)->mem_size) / (MIN_ALLOCABLE_BYTES )) )))
 
 #define PAGE_SIZE (4096)
 
