@@ -29,10 +29,10 @@
 #define ROOT (tree[1])
 #define left(n) (tree[((n->pos)*(2))])
 #define right(n) (tree[(((n->pos)*(2))+(1))])
-#define left_index(n) ((n->pos)*(2))
-#define right_index(n) (((n->pos)*(2))+(1))
-#define parent(n) (tree[(unsigned)((n->pos)/(2))])
-#define parent_index(n) ((unsigned)((n->pos)/(2)))
+#define left_index(n) (((n)->pos)*(2))
+#define right_index(n) ((((n)->pos)*(2))+(1))
+#define parent(n) (tree[(unsigned)(((n)->pos)/(2))])
+#define parent_index(n) ((unsigned)(((n)->pos)/(2)))
 #define level(n) ((unsigned) ( (overall_height) - (log2_(( (n)->mem_size) / (MIN_ALLOCABLE_BYTES )) )))
 
 #define PAGE_SIZE (4096)
@@ -47,7 +47,7 @@ typedef struct _node{
 
 unsigned master;
 
-node** tree; //array che rappresenta l'albero, tree[0] è dummy! l'albero inizia a tree[1]
+node* tree; //array che rappresenta l'albero, tree[0] è dummy! l'albero inizia a tree[1]
 unsigned long overall_memory_size;
 unsigned number_of_nodes; //questo non tiene presente che tree[0] è dummy! se qua c'è scritto 7 vuol dire che ci sono 7 nodi UTILIZZABILI
 void* overall_memory;
@@ -55,6 +55,7 @@ node* trying;
 unsigned failed_at_node;
 unsigned overall_height;
 unsigned mypid;
+node* upper_bound;
 
 int number_of_processes;
 
@@ -83,20 +84,22 @@ void print(node* n);
 bool alloc(node* n);
 
 bool check_parent(node* n);
-void smarca_(node* n, node* upper_bound);
+void smarca_(node* n);
 
 void smarca(node* n){
-    smarca_(n,ROOT);
+    upper_bound = &ROOT;
+    smarca_(n);
 }
 
 void print_in_profondita(node*);
 void print_in_ampiezza();
-void free_node_(node* n, node* upper_bound);
+void free_node_(node* n);
 
 /*Queste funzioni sono esposte all'utente*/
 node* request_memory(unsigned pages);
 void free_node(node* n){
-    free_node_(n, ROOT);
+    upper_bound = &ROOT;
+    free_node_(n);
 }
 
 unsigned log2_(unsigned long value);
@@ -148,7 +151,8 @@ void write_on_a_file_in_ampiezza(){
     }
     
     for(i=1;i<=number_of_nodes;i++){
-        fprintf(f, "%d: (%p) %u has %lu B. mem_start in %lu val is %lu level is %u\n", getpid(), (void*)tree[i], tree[i]->pos, tree[i]->mem_size, tree[i]->mem_start, tree[i]->val, level(tree[i]));
+        node* n = &tree[i];
+        fprintf(f, "(%p) %u val=%lu has %lu B. mem_start in %lu  level is %u\n", (void*)n, tree[i].pos,  tree[i].val , tree[i].mem_size, tree[i].mem_start,  level(n));
     }
     
     fclose(f);
@@ -212,28 +216,27 @@ unsigned log2_ (unsigned long value){
  */
 void init_tree(unsigned long number_of_nodes){
     int i=0;
-    
-    ROOT= mmap(NULL, sizeof(node), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    
-    ROOT->mem_start = 0;
-    ROOT->val = 0;
-    ROOT->mem_size = overall_memory_size;
-    ROOT->pos = 1;
+
+
+    ROOT.mem_start = 0;
+    ROOT.mem_size = overall_memory_size;
+    ROOT.pos = 1;
+    ROOT.val = 0;
+
     
     //init_node(ROOT);
     for(i=2;i<=number_of_nodes;i++){
         
-        tree[i] = mmap(NULL, sizeof(node), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-        node* n = tree[i];
-        n->pos = i;
-        n->val = 0;
-        n->mem_size = parent(n)->mem_size / 2;
+        node parent = parent(&tree[i]);
+        tree[i].pos = i;
+        tree[i].val = 0;
+        tree[i].mem_size = parent.mem_size / 2;
         
-        if(left_index(parent(n))==i)
-            n->mem_start = parent(n)->mem_start;
+        if(left_index(&parent)==i)
+            tree[i].mem_start = parent.mem_start;
         
         else
-            n->mem_start = parent(n)->mem_start + n->mem_size;
+            tree[i].mem_start = parent.mem_start + tree[i].mem_size;
         
     }
     
@@ -258,12 +261,10 @@ void init(unsigned long levels){
         abort();
     
     
-    tree = mmap(NULL,(1+number_of_nodes)*sizeof(node*), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    tree = mmap(NULL,(1+number_of_nodes)*sizeof(node), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     
     if(tree==MAP_FAILED)
         abort();
-    
-    tree[0]=NULL;
     
     init_tree(number_of_nodes);
     
@@ -277,13 +278,13 @@ void init(unsigned long levels){
  Funzione ricorsiva. Chiama se stessa su sui figli e tornando indietro effettua la free (di sistema) sul nodo n
  @param n: il nodo da deallocare (a livello sistema)
  */
-void free_nodes(node* n){
+/*void free_nodes(node* n){
     if(left_index(n)<= number_of_nodes){ //right != NULL <=> left != NULL
         free_nodes(left(n));
         free_nodes(right(n));
     }
     free(n);
-}
+}*/
 
 /*
  Funzione finale che nell'ordine:
@@ -293,7 +294,7 @@ void free_nodes(node* n){
  */
 void end(){
     free(overall_memory);
-    free_nodes(ROOT);
+    //free_nodes(ROOT);
     free(tree);
 }
 
@@ -306,8 +307,9 @@ void print_in_profondita(node* n){
     //printf("%u has\n", n->pos);
     printf("%u has %lu B. mem_start in %lu left is %u right is %u level=%u\n", n->pos, n->mem_size, n->mem_start, left_index(n), right_index(n), level(n));
     if(left_index(n)<= number_of_nodes){
-        print_in_profondita(left(n));
-        print_in_profondita(right(n));
+        print_in_profondita(&left(n));
+        print_in_profondita(&
+                            right(n));
     }
 }
 
@@ -318,7 +320,8 @@ void print_in_ampiezza(){
     int i;
     for(i=1;i<=number_of_nodes;i++){
         //printf("%p\n", tree[i]);
-        printf("%u has %lu B. mem_start in %lu val is %lu level=%u\n", tree[i]->pos, tree[i]->mem_size,tree[i]->mem_start, tree[i]->val, level(tree[i]));
+        printf("%u has %lu B. mem_start in %lu val is %lu level=%u\n", tree[i].pos, tree[i].mem_size,tree[i].mem_start, tree[i].
+               val, level(&tree[i]));
         //printf("%u has %lu B\n", tree[i]->pos, tree[i]->mem_size);
     }
 }
@@ -336,7 +339,7 @@ void print_in_ampiezza(){
  */
 bool check_parent(node* n){
     
-    node* actual = parent(n);
+    node* actual = &parent(n);
     
     unsigned long actual_value;
     unsigned long new_value;
@@ -350,14 +353,15 @@ bool check_parent(node* n){
             failed_at_node = actual->pos;
             
             //ripristino dal nodo dove sono partito al nodo dove sono arrivato (da trying ad n)
-            free_node_(trying, n);
+            upper_bound = n;
+            free_node_(trying);
             
             return false;
         }
         
         new_value = actual_value;
         
-        if(left(actual) == n){ //n è sinistro
+        if(&left(actual) == n){ //n è sinistro
             new_value = new_value & MASK_CLEAN_LEFT_COALESCE;
             new_value = new_value | MASK_OCCUPY_LEFT;
         }
@@ -369,7 +373,7 @@ bool check_parent(node* n){
         
     }while(!__sync_bool_compare_and_swap(&actual->val, actual_value, new_value));
     
-    if(actual==ROOT)
+    if(actual==&ROOT)
         return true;
     
     return check_parent(actual);
@@ -403,7 +407,7 @@ bool alloc(node* n){
     }
     
     //ho allocato tutto l'albero oppure sono riuscito a risalire fino alla radice
-    if(n==ROOT || check_parent(n)){
+    if(n==&ROOT || check_parent(n)){
         return true;
     }
     
@@ -429,7 +433,7 @@ node* request_memory(unsigned byte){
     if(byte<MIN_ALLOCABLE_BYTES)
         byte = MIN_ALLOCABLE_BYTES;
     unsigned starting_node = overall_memory_size / byte; //first node for this level
-    unsigned last_node = left_index(tree[starting_node])-1; //last node for this level
+    unsigned last_node = left_index(&tree[starting_node])-1; //last node for this level
     
     //actual è il posto in cui iniziare a cercare
     
@@ -449,8 +453,8 @@ node* request_memory(unsigned byte){
     
     //quando faccio un giro intero ritorno NULL
     do{
-        if(alloc(tree[actual])==true){
-            return tree[actual];
+        if(alloc(&tree[actual])==true){
+            return &tree[actual];
         }
         
         
@@ -459,7 +463,7 @@ node* request_memory(unsigned byte){
         }
         
         //Questo serve per evitare tutto il sottoalbero in cui ho fallito
-        actual=(failed_at_node+1)* (1<<( level(tree[actual]) - level(tree[failed_at_node])));
+        actual=(failed_at_node+1)* (1<<( level(&tree[actual]) - level(& tree[failed_at_node])));
         
         
         if(actual>last_node){ //se ho sforato riparto dal primo utile, se il primo era quello da cui avevo iniziato esco al controllo del while
@@ -480,14 +484,14 @@ node* request_memory(unsigned byte){
  @param n: nodo da liberare
  @param upper_bound: l'ultimo nodo da liberare
  */
-void free_node_(node* n, node* upper_bound){
+void free_node_(node* n){
     if(n->val!=OCCUPY_BLOCK){
         
         printf("err: il blocco non è occupato\n");
         return;
     }
     
-    node* actual = parent(n);
+    node* actual = &parent(n);
     node* runner = n;
     unsigned long actual_value;
     unsigned long new_value;
@@ -495,19 +499,21 @@ void free_node_(node* n, node* upper_bound){
     while(runner!=upper_bound){
         do{
             actual_value = actual->val;
-            if(left(actual)==runner)
+            if(&left(actual)==runner)
                 new_value = actual_value | MASK_LEFT_COALESCE;
             else
                 new_value = actual_value | MASK_RIGHT_COALESCE;
         }while(!__sync_bool_compare_and_swap(&actual->val,actual_value, new_value));
         runner = actual;
-        actual = parent(actual);
+        actual = &
+        
+        parent(actual);
     }
     
     n->val = 0; //controlla se ci vuole la CAS
     //print_in_ampiezza();
     if(n!=upper_bound)
-        smarca_(n, upper_bound);
+        smarca_(n);
 }
 
 
@@ -516,34 +522,36 @@ void free_node_(node* n, node* upper_bound){
  @param n: il figlio del primo nodo da smarcare! (BISOGNA SMARCARE DAL PADRE)
  @param upper_bound; l'ultimo nodo da smarcare
  */
-void smarca_(node* n, node* upper_bound){
+void smarca_(node* n){
     
-    node* actual = parent(n);
+    node* actual = &
+    parent(n);
     unsigned long actual_value;
     unsigned long new_val;
     do{
         actual_value = actual->val;
         new_val = actual_value;
         //libero il rispettivo sottoramo su new val
-        if(left(actual)==n && (actual_value & MASK_LEFT_COALESCE)==0 ){ //if n è sinistro AND b1=0...già riallocato
+        if(&left(actual)==n && (actual_value & MASK_LEFT_COALESCE)==0 ){ //if n è sinistro AND b1=0...già riallocato
             return;
         }
-        else if(right(actual)==n && (actual_value & MASK_RIGHT_COALESCE)==0){ //if n è destro AND b1=0...già riallocato
+        else if(&right(actual)==n && (actual_value & MASK_RIGHT_COALESCE)==0){ //if n è destro AND b1=0...già riallocato
             return;
         }
-        if (left(actual)==n)
+        if (&left(actual)==n)
             new_val = new_val & MASK_CLEAN_LEFT_COALESCE & MASK_CLEAN_OCCUPIED_LEFT;
         else
             new_val = new_val & MASK_CLEAN_RIGHT_COALESCE & MASK_CLEAN_OCCUPIED_RIGHT;
     } while (!__sync_bool_compare_and_swap(&actual->val,actual_value,new_val));
     if(actual==upper_bound) //se sono arrivato alla radice ho finito
         return;
-    if(left(actual)==n && (actual->val & MASK_OCCUPY_RIGHT)!=0) //if n è sinistro AND (parent(n).actual_value.b4=1) Interrompo! Mio nonno deve vedere il sottoramo occupato perchè mio fratello tiene occupato mio padre!!
+    if(&left(actual)==n && (actual->val & MASK_OCCUPY_RIGHT)!=0) //if n è sinistro AND (parent(n).actual_value.b4=1) Interrompo! Mio nonno deve vedere il sottoramo occupato perchè mio fratello tiene occupato mio padre!!
         return;
-    else if(right(actual)==n && (actual->val & MASK_OCCUPY_LEFT)!=0) // if n è destro AND (parent(n).actual_value.b3=2)
+    else if(&
+            right(actual)==n && (actual->val & MASK_OCCUPY_LEFT)!=0) // if n è destro AND (parent(n).actual_value.b3=2)
         return;
     else
-        smarca_(actual, upper_bound);
+        smarca_(actual);
     
 }
 
