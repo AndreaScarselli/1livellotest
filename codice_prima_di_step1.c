@@ -227,8 +227,8 @@ void init_tree(unsigned long number_of_nodes){
     //init_node(ROOT);
     for(i=2;i<=number_of_nodes;i++){
         
-        node parent = parent(&tree[i]);
         tree[i].pos = i;
+        node parent = parent(&tree[i]);
         tree[i].val = 0;
         tree[i].mem_size = parent.mem_size / 2;
         
@@ -239,7 +239,6 @@ void init_tree(unsigned long number_of_nodes){
             tree[i].mem_start = parent.mem_start + tree[i].mem_size;
         
     }
-    
 }
 
 /*
