@@ -349,7 +349,6 @@ bool check_parent(node* n){
         
         //Se l'AND con OCCUPY fallisce vuol dire che qualcuno lo ha occupato
         if((actual_value & OCCUPY)!=0){
-            
             failed_at_node = actual->pos;
             
             //ripristino dal nodo dove sono partito al nodo dove sono arrivato (da trying ad n)
