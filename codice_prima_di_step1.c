@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <sys/mman.h>
+#include <errno.h>
 
 //bool __sync_bool_compare_and_swap (type *ptr, type oldval type newval)
 
