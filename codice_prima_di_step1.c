@@ -35,7 +35,7 @@
 #define parent(n) (tree[(unsigned)(((n)->pos)/(2))])
 #define parent_index(n) ((unsigned)(((n)->pos)/(2)))
 #define level(n) ((unsigned) ( (overall_height) - (log2_(( (n)->mem_size) / (MIN_ALLOCABLE_BYTES )) )))
-#define SERBATOIO_DIM (8*8192)
+#define SERBATOIO_DIM (16*8192)
 
 #define PAGE_SIZE (4096)
 
@@ -634,7 +634,7 @@ void parallel_try(){
         unsigned long scelta = rand();
         
         //FAI L'ALLOCAZIONE
-        if(scelta>=((RAND_MAX/10)*5)){ // 50% di probabilità fai la malloc
+        if(scelta>=((RAND_MAX/10)*4)){ // 50% di probabilità fai la malloc
             
             //QUA CON SCELTA VIENE DECISO IL NUMERO DELLE PAGINE DA ALLOCARE
             scelta = rand_lim(log2_(MAX_ALLOCABLE_BYTE/MIN_ALLOCABLE_BYTES));
