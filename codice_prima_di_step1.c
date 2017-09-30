@@ -759,7 +759,7 @@ int main(int argc, char**argv){
                 runner->next = malloc(sizeof(taken_list_elem));
                 runner = runner->next;
             }
-            
+            parallel_try();
             free(takenn);
             exit(0);
         }
