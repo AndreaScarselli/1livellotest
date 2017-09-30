@@ -35,6 +35,7 @@
 #define parent(n) (tree[(unsigned)(((n)->pos)/(2))])
 #define parent_index(n) ((unsigned)(((n)->pos)/(2)))
 #define level(n) ((unsigned) ( (overall_height) - (log2_(( (n)->mem_size) / (MIN_ALLOCABLE_BYTES )) )))
+#define SERBATOIO_DIM (8*8192)
 
 #define PAGE_SIZE (4096)
 
@@ -73,6 +74,9 @@ typedef struct _taken_list{
 
 
 taken_list* takenn;
+taken_list* takenn_serbatoio;
+int* failures;
+int write_failures_on;
 
 
 unsigned long upper_power_of_two(unsigned long v);
@@ -618,6 +622,9 @@ int main(int argc, char**argv){
 void parallel_try(){
     int i=0;
     int tentativi = 10000000 /number_of_processes ;
+    int allocazioni;
+    int free;
+    free=allocazioni=0;
     for(i=0;i<tentativi;i++){
         
         //stampo ogni tanto per controllare che il sistema non si è bloccato
@@ -627,7 +634,7 @@ void parallel_try(){
         unsigned long scelta = rand();
         
         //FAI L'ALLOCAZIONE
-        if(scelta>=((RAND_MAX/10)*3)){ // 70% di probabilità fai la malloc
+        if(scelta>=((RAND_MAX/10)*5)){ // 50% di probabilità fai la malloc
             
             //QUA CON SCELTA VIENE DECISO IL NUMERO DELLE PAGINE DA ALLOCARE
             scelta = rand_lim(log2_(MAX_ALLOCABLE_BYTE/MIN_ALLOCABLE_BYTES));
@@ -636,14 +643,24 @@ void parallel_try(){
                 scelta=1;
             
             node* obt;
+            if(takenn_serbatoio->number==0){
+                printf("Allocazioni %d free %d allocazioni-free=%d\n", allocazioni, free, allocazioni-free);
+                exit(0);
+            }
+            
             obt = request_memory(scelta);
             
             if (obt==NULL){
                 //printf("not enough memory\n");
+                failures[write_failures_on]++;
                 continue;
             }
             
-            taken_list_elem* t = malloc(sizeof(taken_list));
+            allocazioni++;
+            //printf("giro %d\n",i);
+            taken_list_elem* t = takenn_serbatoio->head;
+            takenn_serbatoio->head = takenn_serbatoio->head->next;
+            takenn_serbatoio->number--;
             t->elem = obt;
             t->next = NULL;
             if(takenn->head!=NULL)
@@ -657,7 +674,8 @@ void parallel_try(){
             if(takenn->number==0){
                 continue;
             }
-            
+            free++;
+
             //scelgo il nodo da liberare (nella mia taken list
             scelta = rand_lim((takenn->number)-1);
             
@@ -666,7 +684,9 @@ void parallel_try(){
                 taken_list_elem* die = takenn->head;
                 takenn->head = takenn->head->next;
                 takenn->number--;
-                free(die);
+                die->next = takenn_serbatoio->head;
+                takenn_serbatoio->head = die;
+                takenn_serbatoio->number++;
             }
             else{
                 taken_list_elem* runner = takenn->head;
@@ -685,7 +705,9 @@ void parallel_try(){
                     runner->next=NULL;
                 
                 takenn->number--;
-                free(chosen);
+                chosen->next = takenn_serbatoio->head;
+                takenn_serbatoio->head = chosen;
+                takenn_serbatoio->number++;
             }
             
         }
@@ -711,21 +733,32 @@ int main(int argc, char**argv){
     
     
     init(requested);
+    failures = mmap(NULL, sizeof(int) * number_of_processes, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     //time ( &time2 );
     //printf("time1= %lu\n", time1);
     //printf("time2= %lu\n", time2);
     //printf("time2-time1=%lu\n", time2 -time1);
     for(i=0; i<number_of_processes; i++){
+        failures[i] = 0;
         if(fork()==0){
             //child code, do work and exit.
             mypid=getpid();
             
+            write_failures_on = mypid % number_of_processes;
             //per la gestione dei nodi presi dal singolo processo.
             takenn = malloc(sizeof(taken_list));
             takenn->head = NULL;
             takenn->number = 0;
             
-            parallel_try();
+            takenn_serbatoio = malloc(sizeof(taken_list));
+            takenn_serbatoio->number = SERBATOIO_DIM;
+            takenn_serbatoio->head = malloc(sizeof(taken_list_elem));
+            taken_list_elem* runner = takenn_serbatoio->head;
+            int j;
+            for(j=0;j<SERBATOIO_DIM;j++){
+                runner->next = malloc(sizeof(taken_list_elem));
+                runner = runner->next;
+            }
             
             free(takenn);
             exit(0);
@@ -739,6 +772,15 @@ int main(int argc, char**argv){
             break;
         }
     }
+    
+    puts("failures:");
+    int total = 0;;
+    for(i=0;i<number_of_processes;i++){
+        printf("%d: %d\n", i, failures[i]);
+        total += failures[i];
+    }
+    printf("total failure is %d\n", total);
+    //write_on_a_file_in_ampiezza();
     
     return 0;
 }
