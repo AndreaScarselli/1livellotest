@@ -17,10 +17,10 @@
 #define MASK_RIGHT_COALESCE ((unsigned long) (0x4))
 //PARAMETRIZZAZIONE
 #ifndef MIN_ALLOCABLE_BYTES
-#define MIN_ALLOCABLE_BYTES 2048 //(2KB) numero minimo di byte allocabili
+#define MIN_ALLOCABLE_BYTES 8 //(2KB) numero minimo di byte allocabili
 #endif
 #ifndef MAX_ALLOCABLE_BYTE
-#define MAX_ALLOCABLE_BYTE  4194304 //(4MB)
+#define MAX_ALLOCABLE_BYTE  16384 //(16KB)
 #endif
 #define FREE_BLOCK ((unsigned long) 0)
 #define OCCUPY_BLOCK ((OCCUPY) | (MASK_OCCUPY_LEFT) | (MASK_OCCUPY_RIGHT))
@@ -628,13 +628,13 @@ void parallel_try(){
     for(i=0;i<tentativi;i++){
         
         //stampo ogni tanto per controllare che il sistema non si è bloccato
-        if(i%100000==0)
-            printf("(%u) %d\n", mypid, i);
+        //if(i%100000==0)
+        //    printf("(%u) %d\n", mypid, i);
         
         unsigned long scelta = rand();
         
         //FAI L'ALLOCAZIONE
-        if(scelta>=((RAND_MAX/10)*4)){ // 50% di probabilità fai la malloc
+        if(scelta>=((RAND_MAX/10)*5)){ // 50% di probabilità fai la malloc
             
             //QUA CON SCELTA VIENE DECISO IL NUMERO DELLE PAGINE DA ALLOCARE
             scelta = rand_lim(log2_(MAX_ALLOCABLE_BYTE/MIN_ALLOCABLE_BYTES));
